@@ -54,15 +54,30 @@ def download_and_process_photo(photo_url, species_folder, photo_index):
         # Download the image
         response = requests.get(photo_url)
         if response.status_code == 200:
+            
+            # Ensure the content is actually an image
+            if 'image' not in response.headers['Content-Type']:
+                print(f"Skipping non-image URL: {photo_url}")
+                return  # Skip if it's not an image
             img = Image.open(BytesIO(response.content))
+                        
+            # Check the image format before saving
+            if img.format not in ['JPEG', 'PNG']:
+                print(f"Skipping non-JPEG/PNG image: {photo_url}")
+                return  # Skip non-JPEG/PNG files
+            
+            # Check if image dimensions are valid (non-zero width/height)
+            if img.width == 0 or img.height == 0:
+                print(f"Skipping invalid image with zero dimensions: {photo_url}")
+                return  # Skip images with invalid dimensions
 
             # Save the image with a unique name
-            photo_filename = f"{species_folder}/photo_{photo_index}.jpg"
-            
-            # Convert RGBA to RGB (remove alpha channel)
-            if img.mode == 'RGBA':
+            photo_filename = f"{species_folder}/photo_{photo_index}.{img.format.lower()}"
+                        
+            if img.mode != 'RGB' and img.format == 'JPEG':
+                # Convert the image to RGB if it is a JPEG (other formats may need different handling)
                 img = img.convert('RGB')
-                
+            
             img.save(photo_filename)
 
             # print(f"Downloaded and saved {photo_filename}")
@@ -162,7 +177,7 @@ def report_stats():
     print(f"Total requests made: {request_count}")
     print(f"Runtime progress : {(species_done / total_results) * 100 }%")
     
-def process_indian_oceanic_fish_species(nb_imgs):
+def process_indian_oceanic_fish_species(nb_img):
     page = 1
     per_page = 500  # Maximum number of results per page
     observations = get_observation_species_counts(
@@ -202,7 +217,7 @@ def process_indian_oceanic_fish_species(nb_imgs):
     
     # Process species in parallel using ThreadPoolExecutor
     with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
-        executor.map(process_specy, all_species, nb_imgs)
+        executor.map(process_specy, all_species, [nb_img] * len(all_species))
 
 if __name__ == "__main__":  
     parser = argparse.ArgumentParser(description="Scrape fish photos from iNaturalist")
@@ -211,6 +226,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     if args.species:
+        # TODO: fetch the specy from scientific name
         taxonNameList = args.species.split(",")
         for taxonName in taxonNameList:
             r = search_specy(taxonName)
@@ -220,4 +236,4 @@ if __name__ == "__main__":
             else :
                 raise ValueError(f'Specy not found for {taxonName}')
     else :
-        process_indian_oceanic_fish_species(nb_imgs=args.num_images)
+        process_indian_oceanic_fish_species(nb_img=args.num_images)
